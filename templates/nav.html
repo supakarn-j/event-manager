@@ -1,0 +1,16 @@
+{{ define "nav" }}
+<header class="app-header">
+  <a class="app-brand" href="/home">
+    <span class="app-brand-mark">E</span>
+    <span>Event Manager</span>
+  </a>
+  {{ if .showAddStream }}
+  <button
+    class="btn btn-primary"
+    data-bs-toggle="modal"
+    data-bs-target="#streamModal">
+    Add stream
+  </button>
+  {{ end }}
+</header>
+{{end}}

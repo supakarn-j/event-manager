@@ -1,0 +1,356 @@
+{{ define "content" }}
+{{ $streamName := .name }}
+<header class="app-topbar">
+    <div>
+        <div class="app-crumb"><a href="/home">Streams</a> / {{ $streamName }}</div>
+        <h1 class="app-title">{{ $streamName }}</h1>
+    </div>
+    <div class="app-actions">
+        <button
+            class="btn btn-primary"
+            data-bs-toggle="modal"
+            data-bs-target="#eventModal">
+            Send event
+        </button>
+    </div>
+</header>
+
+<div class="app-content">
+    <div class="detail-grid">
+        <section class="group-stack" id="consumer-groups">
+            {{ range .groups }}
+            {{ $group := . }}
+            <div class="app-panel" id="card-group-{{ $group.Name }}">
+                <div class="panel-head">
+                    <h2 class="panel-title">Consumers</h2>
+                    <span class="panel-meta">{{ .Name }} · PEL: {{ .Pending }}</span>
+                </div>
+                <div id="group-{{ $group.Name }}">
+                    {{ range .Consumers }}
+                    <div class="consumer-row" id="consumer-{{ $group.Name }}-{{ .Name }}">
+                        <div class="consumer-summary">
+                            <div class="consumer-title-row">
+                                {{ if .Healthy }}
+                                    <span class="status-pill consumer-badge">Healthy</span>
+                                {{ else }}
+                                    <span class="status-pill down consumer-badge">Down</span>
+                                {{ end }}
+                                <span class="consumer-name truncate">{{ .Name }}</span>
+                                <span class="panel-meta consumer-pel">PEL: {{ .Pending }}</span>
+                            </div>
+                            <span class="panel-meta">
+                                <span class="consumer-last-seen">Last seen: {{ .LastSeen }}</span>
+                            </span>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <button
+                                class="btn btn-sm btn-outline-danger"
+                                hx-delete="/api/v1/streams/{{ $streamName }}/consumers/{{ $group.Name }}/{{ .Name }}"
+                                hx-target="closest .consumer-row"
+                                hx-swap="outerHTML"
+                                hx-confirm="Delete consumer '{{ .Name }}' ?"
+                                title="Delete consumer"
+                                aria-label="Delete consumer {{ .Name }}">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    {{ else }}
+                    <div class="empty-state" id="no-consumer">No consumers registered</div>
+                    {{ end }}
+                </div>
+            </div>
+            {{ else }}
+            <section class="app-panel">
+                <div class="panel-head">
+                    <h2 class="panel-title">Consumers</h2>
+                    <span class="panel-meta">No groups</span>
+                </div>
+                <div class="empty-state">No consumer groups registered</div>
+            </section>
+            {{ end }}
+        </section>
+
+        <div>
+            <div
+                id="events-panel"
+                hx-get="/streams/{{ .name }}/events"
+                hx-trigger="load"
+                hx-target="this"
+                hx-swap="innerHTML">
+                <section class="app-panel">
+                    <div class="empty-state">Loading events...</div>
+                </section>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="eventModal" tabindex="-1" aria-labelledby="eventModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form
+                hx-post="/api/v1/streams/{{ $streamName }}/events"
+                hx-swap="none"
+                hx-on="htmx:afterRequest: if (event.detail.successful) { bootstrap.Modal.getInstance(document.getElementById('eventModal')).hide(); this.reset(); htmx.ajax('GET', '/streams/{{ $streamName }}/events', { target: '#events-panel', swap: 'innerHTML' }); }">
+                <div class="modal-header">
+                    <div>
+                        <h5 class="modal-title" id="eventModalLabel">Send event</h5>
+                        <p class="mb-0 panel-meta">Append a new Redis stream entry to {{ $streamName }}.</p>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="event-stream">Stream</label>
+                        <input id="event-stream" class="form-control" value="{{ $streamName }}" disabled>
+                    </div>
+                    <div>
+                        <label class="form-label" for="event-payload">Event values as JSON</label>
+                        <textarea
+                            id="event-payload"
+                            name="payload"
+                            class="form-control event-payload-input"
+                            spellcheck="false"
+                            required
+                            style="height: 300px;">{
+  "source": "manual",
+  "status": "created"
+}</textarea>
+                        <div class="form-text">Send a JSON object. Top-level keys become Redis stream fields.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Send event</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript" src="https://unpkg.com/centrifuge@^5/dist/centrifuge.js"></script>
+
+<script>
+    (function() {
+        function rowId(group, consumer) {
+            return `consumer-${group}-${consumer}`
+        }
+        function groupId(group) {
+            return `group-${group}`
+        }
+
+        function setBadge(row, healthy) {
+            const badge = row.querySelector(".consumer-badge");
+            if (!badge) return;
+
+            badge.textContent = healthy ? "Healthy" : "Down"
+            badge.classList.remove("down");
+            if (!healthy) badge.classList.add("down")
+        }
+
+        function setLastSeen(row, lastSeen) {
+            const lastSeenEl = row.querySelector(".consumer-last-seen");
+
+            if (!lastSeenEl) return;
+            lastSeenEl.textContent = `Last seen: ${lastSeen || "-"}`;
+        }
+
+        function updateStatus(data) {
+            const group = data.group
+            const consumer = data.consumer
+            const healthy = data.healthy
+            const lastSeen = data.last_seen || "-"
+
+            if (!group || !consumer) return;
+            let card = document.getElementById(`card-group-${group}`);
+            if (!card) {
+                const container = document.createElement("div");
+                container.className = "app-panel"
+                container.id = `card-group-${group}`
+                container.innerHTML = `
+                <div class="panel-head">
+                    <h2 class="panel-title">Consumers</h2>
+                    <span class="panel-meta">${group} · PEL: 0</span>
+                </div>
+                <div id="group-${group}"></div>
+                `
+
+                document.getElementById("consumer-groups").prepend(container)
+            }
+
+            let row = document.getElementById(rowId(group, consumer));
+            if (row) {
+                setBadge(row, healthy)
+                setLastSeen(row, lastSeen)
+                return;
+            }
+
+            if (healthy) {
+                const groupList = document.getElementById(groupId(group));
+                if (!groupList) return;
+
+                const placeholder = groupList.querySelector('#no-consumer')
+                if (placeholder) placeholder.remove();
+    
+                row = createNewRow(group, consumer, healthy, lastSeen);
+                groupList.appendChild(row);
+    
+                if (window.htmx) {
+                    htmx.process(row);
+                }
+            }
+        }
+
+        function createNewRow(group, consumer, healthy, lastSeen) {
+            const row = document.createElement("div");
+            row.className = "consumer-row";
+            row.id = rowId(group, consumer);
+            row.dataset.group = group;
+            row.dataset.consumer = consumer;
+
+            row.innerHTML = `
+                <div class="consumer-summary">
+                    <div class="consumer-title-row">
+                        <span class="status-pill consumer-badge ${healthy ? "" : "down"}">
+                            ${healthy ? "Healthy" : "Down"}
+                        </span>
+                        <span class="consumer-name truncate">${consumer}</span>
+                        <span class="panel-meta consumer-pel">PEL: 0</span>
+                    </div>
+                    <span class="panel-meta">
+                        <span class="consumer-last-seen">Last seen: ${lastSeen}</span>
+                    </span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button
+                        class="btn btn-sm btn-outline-danger"
+                        hx-delete="/api/v1/streams/${stream}/consumers/${group}/${consumer}"
+                        hx-target="closest .consumer-row"
+                        hx-swap="outerHTML"
+                        hx-confirm="Delete consumer '${consumer}' ?"
+                        title="Delete consumer"
+                        aria-label="Delete consumer ${consumer}">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            `
+
+            return row
+        }
+
+        function eventColumnCount() {
+            return Math.max(1, document.querySelectorAll("#events-panel thead th").length);
+        }
+
+        function insertEmptyEventsRow() {
+            const tbody = document.querySelector("#events-panel table tbody");
+            if (!tbody || tbody.querySelector("tr")) return;
+
+            const tr = document.createElement("tr");
+            const td = document.createElement("td");
+            td.colSpan = eventColumnCount();
+            td.className = "empty-state";
+            td.textContent = "No events found";
+            tr.appendChild(td);
+            tbody.appendChild(tr);
+        }
+
+        window.handleEventDeleted = function(event) {
+            if (!event.detail || !event.detail.successful) return;
+
+            const el = document.getElementById("event-num");
+            if (el) {
+                const n = parseInt(el.textContent || "0", 10);
+                el.textContent = Math.max(0, (Number.isNaN(n) ? 0 : n) - 1);
+            }
+
+            setTimeout(insertEmptyEventsRow, 0);
+        }
+
+        const stream = "{{ $streamName }}"
+        const centrifuge = new Centrifuge(`ws://${location.host}/ws`);
+        const sub = centrifuge.newSubscription(`${stream}`)
+
+        sub.on('publication', function(ctx) {
+            if (!ctx.data) return;
+            const event = ctx.data
+
+            if (event.action === "health_check") {
+                updateStatus(event);
+            } else if (event.action === "event_added") {
+                const tbody = document.querySelector("#events-panel table tbody");
+                if (!tbody) return;
+                const headers = Array.from(document.querySelectorAll("#events-panel thead th"))
+                    .slice(3)
+                    .slice(0, -1)
+                    .map((th) => th.textContent.trim());
+                const tr = document.createElement("tr");
+                const valueCells = headers.map((header) => {
+                    const value = event.values ? event.values[header] : "";
+                    const text = typeof value === "object" && value !== null
+                        ? JSON.stringify(value)
+                        : (value ?? "");
+                    const td = document.createElement("td");
+                    td.className = "values";
+                    const pre = document.createElement("pre");
+                    pre.className = "json";
+                    pre.textContent = text;
+                    td.appendChild(pre);
+                    return td;
+                });
+                tr.innerHTML = `
+                <td class="ts">${event.timestamp}</td>
+                <td class="id">${event.id}</td>
+                <td class="ack-cell">
+                    <span
+                        class="ack-pill pending"
+                        tabindex="0"
+                        data-bs-toggle="tooltip"
+                        data-bs-placement="left"
+                        data-bs-container="body"
+                        data-bs-custom-class="ack-tooltip"
+                        data-bs-title="Not processed yet&#10;No consumer group has acked this event">Pending</span>
+                </td>
+                `
+                valueCells.forEach((td) => tr.appendChild(td));
+                const actionCell = document.createElement("td");
+                actionCell.innerHTML = `
+                    <div class="event-row-actions">
+                    <button
+                        class="btn btn-sm btn-outline-danger"
+                        hx-delete="/api/v1/streams/${stream}/events/${event.id}"
+                        hx-target="closest tr"
+                        hx-swap="outerHTML"
+                        hx-confirm="Delete event '${event.id}' ?"
+                        hx-on="htmx:afterRequest: window.handleEventDeleted && window.handleEventDeleted(event)"
+                        title="Delete event"
+                        aria-label="Delete event ${event.id}">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                    </div>
+                `;
+                tr.appendChild(actionCell);
+                const emptyRow = tbody.querySelector(".empty-state");
+                if (emptyRow) emptyRow.closest("tr").remove();
+    
+                const eventsNum = document.getElementById("event-num")
+                if (!eventsNum) return
+                let num = parseInt(eventsNum.textContent || "0", 10)
+                if (Number.isNaN(num)) num = 0
+
+                num = num + 1
+                eventsNum.textContent = num
+        
+                tbody.prepend(tr);
+                if (window.htmx) {
+                    htmx.process(tr);
+                }
+                window.initAckTooltips && window.initAckTooltips(tr);
+            }
+        })
+        sub.subscribe();
+        centrifuge.connect();
+    })();
+</script>
+{{ end }}

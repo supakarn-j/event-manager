@@ -1,0 +1,6 @@
+.env
+tmp
+.superpowers
+go.work
+go.work.sum
+.tools

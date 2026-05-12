@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ .title }}</title>
+
+    <!-- Bootstrap 5 CSS -->
+    <link 
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" 
+        rel="stylesheet" 
+        integrity="sha384-LN+7fdVzj6u52u30Kp6M/trliBMCMKTyK833zpbD+pXdCLuTusPj697FH4R/5mcr" 
+        crossorigin="anonymous"
+    >
+
+    <!-- Font Awesome -->
+    <link 
+        rel="stylesheet" 
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    >
+    <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="app-body">
+    <div class="app-page">
+        <div class="app-shell">
+            {{ template "nav" . }}
+            <main class="app-main">
+            {{ block "content" . }}{{end}}
+            </main>
+        </div>
+    </div>
+
+<!-- HTMX -->
+<script src="https://unpkg.com/htmx.org@1.9.2"></script>
+<script>
+  htmx.config.withCredentials = true;
+</script>
+
+<!-- Bootstrap 5 JS Bundle -->
+<script 
+    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js" 
+    integrity="sha384-ndDqU0Gzau9qJ1lfW4pNLlhNTkCfHzAVBReH9diLvGRem5+R9g2FzA8ZGN954O5Q" 
+    crossorigin="anonymous">
+</script>
+<script>
+  window.initAckTooltips = function(root) {
+    if (!window.bootstrap) return;
+    const scope = root || document;
+    scope.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+      bootstrap.Tooltip.getOrCreateInstance(el);
+    });
+  };
+
+  document.addEventListener("DOMContentLoaded", function() {
+    window.initAckTooltips(document);
+  });
+
+  document.body.addEventListener("htmx:afterSwap", function(event) {
+    window.initAckTooltips(event.target);
+  });
+</script>
+<!-- Graph renderer -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sigma.js/2.4.0/sigma.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/graphology/0.25.4/graphology.umd.min.js"></script>
+</body>
+</html>

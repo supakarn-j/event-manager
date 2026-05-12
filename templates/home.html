@@ -1,0 +1,46 @@
+{{ define "content" }}
+<div class="app-content">
+    <div
+        id="stream-table"
+        hx-get="/streams"
+        hx-trigger="load"
+        hx-swap="innerHTML">
+        <section class="app-panel">
+            <div class="empty-state">Loading streams...</div>
+        </section>
+    </div>
+</div>
+
+<div class="modal fade" id="streamModal" tabindex="-1" aria-labelledby="streamModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form
+                hx-post="/api/v1/streams"
+                hx-swap="none"
+                hx-on="htmx:afterRequest: if (event.detail.successful) { bootstrap.Modal.getInstance(document.getElementById('streamModal')).hide(); this.reset(); htmx.ajax('GET', '/streams', { target: '#stream-table', swap: 'innerHTML' }); }">
+                <div class="modal-header">
+                    <div>
+                        <h5 class="modal-title" id="streamModalLabel">Add stream</h5>
+                        <p class="mb-0 panel-meta">Create an empty Redis stream so it appears in the landing list.</p>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label" for="stream-name">Stream name</label>
+                    <input
+                        id="stream-name"
+                        type="text"
+                        name="name"
+                        class="form-control"
+                        placeholder="orders.created"
+                        required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create stream</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{{ end }}
