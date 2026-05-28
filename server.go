@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"event-manager/route"
 	"event-manager/utils"
 	"fmt"
+	"io/fs"
 	"log"
 	"strconv"
 	"strings"
@@ -16,6 +18,10 @@ import (
 	"github.com/redis/go-redis/v9"
 	stream "gitlab.com/hannlync/backend/stream-go.git"
 )
+
+//go:embed frontend/dist/*
+//go:embed frontend/dist/assets/*
+var staticFiles embed.FS
 
 func main() {
 	app := initApp()
@@ -46,8 +52,13 @@ func main() {
 	}
 	defer producer.Close()
 
+	distFS, err := fs.Sub(staticFiles, "frontend/dist")
+	if err != nil {
+		panic(err)
+	}
+
 	route.RegisterAPI(r, rdb, producer)
-	route.RegisterFrontend(r, rdb)
+	route.RegisterFrontend(r, rdb, distFS)
 	route.RegisterWS(r, rdb, node)
 
 	go func() {

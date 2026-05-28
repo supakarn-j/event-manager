@@ -41,3 +41,6 @@ run: ## Run the program
 test: ## Run tests
 	@go test -timeout 30s ./tests/... -coverprofile=coverage.out -coverpkg=./... -v
 	@go tool cover -html=coverage.out -o coverage.html
+
+frontend-build:
+	cd frontend && PATH=$(PATH):/home/rocky/event-manager/.tools/node-v25.9.0-linux-x64/bin npm run build

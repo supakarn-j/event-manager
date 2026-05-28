@@ -4,3 +4,4 @@ tmp
 go.work
 go.work.sum
 .tools
+frontend/node_modules/

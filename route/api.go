@@ -1,104 +1,62 @@
 package route
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
-	"strings"
+	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	stream "gitlab.com/hannlync/backend/stream-go.git"
 )
 
-func ackFieldPatternForEvent(id string) string {
-	return id + ":*"
+type StreamDetailResponse struct {
+	Name   string                `json:"name"`
+	Groups []StreamConsumerGroup `json:"groups"`
 }
 
-func deleteEventAckMetadata(ctx context.Context, rdb *redis.Client, stream, id string) error {
-	ackKey := fmt.Sprintf("%s:acks", stream)
-	pattern := ackFieldPatternForEvent(id)
-	var cursor uint64
-
-	for {
-		fields, nextCursor, err := rdb.HScanNoValues(ctx, ackKey, cursor, pattern, 100).Result()
-		if err != nil {
-			return err
-		}
-		if len(fields) > 0 {
-			if err := rdb.HDel(ctx, ackKey, fields...).Err(); err != nil {
-				return err
-			}
-		}
-		cursor = nextCursor
-		if cursor == 0 {
-			return nil
-		}
-	}
+type StreamConsumerGroup struct {
+	Name      string           `json:"name"`
+	Pending   int64            `json:"pending"`
+	Consumers []StreamConsumer `json:"consumers"`
 }
 
-func parseEventPayload(body io.Reader, contentType string) (map[string]any, error) {
-	var rawPayload []byte
+type StreamConsumer struct {
+	Name     string `json:"name"`
+	LastSeen string `json:"lastSeen"`
+	Healthy  bool   `json:"healthy"`
+	Pending  int64  `json:"pending"`
+}
 
-	if strings.HasPrefix(contentType, "application/x-www-form-urlencoded") ||
-		strings.HasPrefix(contentType, "multipart/form-data") {
-		bodyBytes, err := io.ReadAll(body)
-		if err != nil {
-			return nil, err
-		}
+type StreamEventsResponse struct {
+	StreamName string            `json:"streamName"`
+	Headers    []string          `json:"headers"`
+	Events     []StreamEventInfo `json:"events"`
+}
 
-		values, err := url.ParseQuery(string(bodyBytes))
-		if err != nil {
-			return nil, err
-		}
-		rawPayload = []byte(strings.TrimSpace(values.Get("payload")))
-	} else {
-		var err error
-		rawPayload, err = io.ReadAll(body)
-		if err != nil {
-			return nil, err
-		}
-		rawPayload = []byte(strings.TrimSpace(string(rawPayload)))
-	}
+type StreamEventInfo struct {
+	Timestamp string            `json:"timestamp"`
+	ID        string            `json:"id"`
+	Values    map[string]string `json:"values"`
+	Ack       StreamAckStatus   `json:"ack"`
+}
 
-	if len(rawPayload) == 0 {
-		return nil, errors.New("payload is required")
-	}
+type StreamAckStatus struct {
+	Label   string `json:"label"`
+	State   string `json:"state"`
+	Tooltip string `json:"tooltip"`
+}
 
-	var decoded map[string]any
-	if err := json.Unmarshal(rawPayload, &decoded); err != nil {
-		return nil, fmt.Errorf("payload must be a valid JSON object: %w", err)
-	}
+type AckMetadata struct {
+	EventID string
+	Records []AckRecord
+}
 
-	if len(decoded) == 0 {
-		return nil, errors.New("payload must contain at least one field")
-	}
-
-	values := make(map[string]any, len(decoded))
-	for key, value := range decoded {
-		switch v := value.(type) {
-		case nil:
-			values[key] = ""
-		case string:
-			values[key] = v
-		case float64:
-			values[key] = strings.TrimRight(strings.TrimRight(fmt.Sprintf("%f", v), "0"), ".")
-		case bool:
-			values[key] = fmt.Sprintf("%t", v)
-		default:
-			b, err := json.Marshal(v)
-			if err != nil {
-				return nil, fmt.Errorf("failed to encode field %q: %w", key, err)
-			}
-			values[key] = string(b)
-		}
-	}
-
-	return values, nil
+type AckRecord struct {
+	Group     string
+	Consumer  string
+	Timestamp string
 }
 
 func RegisterAPI(r *gin.Engine, rdb *redis.Client, producer *stream.Producer) {
@@ -126,6 +84,118 @@ func RegisterAPI(r *gin.Engine, rdb *redis.Client, producer *stream.Producer) {
 		}
 
 		c.Status(http.StatusOK)
+	})
+
+	streams.GET("", func(c *gin.Context) {
+		var curr uint64
+		var streams []StreamListItem
+
+		for {
+			keys, nextCurr, err := rdb.Scan(c, curr, "*", 0).Result()
+			if err != nil {
+				c.AbortWithError(http.StatusInternalServerError, err)
+			}
+
+			for _, key := range keys {
+				t, err := rdb.Type(c, key).Result()
+				if err != nil {
+					continue
+				}
+
+				if t == "stream" {
+					s, err := rdb.XInfoStream(c, key).Result()
+					if err != nil {
+						continue
+					}
+					streams = append(streams, StreamListItem{
+						Name:   key,
+						Length: s.Length,
+						Groups: s.Groups,
+					})
+				}
+			}
+			curr = nextCurr
+			if curr == 0 {
+				break
+			}
+		}
+		c.JSON(http.StatusOK, StreamsResponse{
+			RedisURL: "redis://" + rdb.Options().Addr,
+			Streams:  streams,
+		})
+	})
+
+	streams.GET("/:stream", func(c *gin.Context) {
+		streamName := c.Param("stream")
+
+		stream, err := rdb.XInfoStreamFull(c, streamName, 0).Result()
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		groups := make([]StreamConsumerGroup, 0, len(stream.Groups))
+		for _, group := range stream.Groups {
+			var pendingCount int64
+			pending, err := rdb.XPending(c, streamName, group.Name).Result()
+			if err == nil && pending != nil {
+				pendingCount = pending.Count
+			}
+
+			consumers := make([]StreamConsumer, 0, len(group.Consumers))
+			for _, consumer := range group.Consumers {
+				var healthy bool
+				var consumerPending int64
+				if pending != nil {
+					consumerPending = pending.Consumers[consumer.Name]
+				}
+
+				lastSeen := consumer.SeenTime.Format("2006-01-02 15:04:05 -07:00 MST")
+				res, _ := rdb.HGet(c, fmt.Sprintf("%s:%s:%s", streamName, group.Name, consumer.Name), "timestamp").Result()
+				if res != "" {
+					healthy = true
+					unix, _ := strconv.ParseInt(res, 10, 64)
+					lastSeen = time.Unix(unix, 0).Format("2006-01-02 15:04:05 -07:00 MST")
+				}
+
+				consumers = append(consumers, StreamConsumer{
+					Name:     consumer.Name,
+					LastSeen: lastSeen,
+					Healthy:  healthy,
+					Pending:  consumerPending,
+				})
+			}
+
+			groups = append(groups, StreamConsumerGroup{
+				Name:      group.Name,
+				Pending:   pendingCount,
+				Consumers: consumers,
+			})
+		}
+
+		c.JSON(http.StatusOK, StreamDetailResponse{
+			Name:   streamName,
+			Groups: groups,
+		})
+	})
+
+	streams.GET("/:stream/events", func(c *gin.Context) {
+		streamName := c.Param("stream")
+		if streamName == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "stream is required"})
+			return
+		}
+
+		events, err := rdb.XRevRange(c, streamName, "+", "-").Result()
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		ackValues, _ := rdb.HGetAll(c, fmt.Sprintf("%s:acks", streamName)).Result()
+		streamGroups, _ := rdb.XInfoGroups(c, streamName).Result()
+
+		c.JSON(http.StatusOK, buildStreamEventsResponse(streamName, events, ackValues, groupNames(streamGroups)))
 	})
 
 	streams.DELETE("/:stream", func(c *gin.Context) {
