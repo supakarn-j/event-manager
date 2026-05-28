@@ -53,6 +53,7 @@ require (
 	github.com/segmentio/encoding v0.5.3 // indirect
 	github.com/shadowspore/fossil-delta v0.0.0-20241213113458-1d797d70cbe3 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
+	github.com/supakarn-j/stream-go v0.0.0-20260528083420-ef08a026426f // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
