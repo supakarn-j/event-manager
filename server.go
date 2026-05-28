@@ -16,7 +16,7 @@ import (
 	"github.com/centrifugal/centrifuge"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
-	stream "gitlab.com/hannlync/backend/stream-go.git"
+	stream "github.com/supakarn-j/stream-go"
 )
 
 //go:embed frontend/dist/*
