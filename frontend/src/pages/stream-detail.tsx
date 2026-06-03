@@ -23,6 +23,7 @@ type HealthCheckEvent = {
   action: 'health_check'
   group?: string
   consumer?: string
+  ip?: string
   healthy?: boolean
   last_seen?: string
 }
@@ -152,6 +153,7 @@ export default function StreamDetail() {
           consumers: [
             {
               name: consumerName,
+              ip: event.ip,
               lastSeen: event.last_seen || '-',
               healthy: Boolean(event.healthy),
               pending: 0,
@@ -168,6 +170,7 @@ export default function StreamDetail() {
         if (!event.healthy) return current
         consumers.push({
           name: consumerName,
+          ip: event.ip,
           lastSeen: event.last_seen || '-',
           healthy: true,
           pending: 0,
@@ -175,6 +178,7 @@ export default function StreamDetail() {
       } else {
         consumers[consumerIndex] = {
           ...consumers[consumerIndex],
+          ip: event.ip || consumers[consumerIndex].ip,
           lastSeen: event.last_seen || consumers[consumerIndex].lastSeen,
           healthy: Boolean(event.healthy),
         }

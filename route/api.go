@@ -1,10 +1,10 @@
 package route
 
 import (
+	"event-manager/utils"
 	"fmt"
+	"log"
 	"net/http"
-	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -24,6 +24,7 @@ type StreamConsumerGroup struct {
 
 type StreamConsumer struct {
 	Name     string `json:"name"`
+	IP       string `json:"ip"`
 	LastSeen string `json:"lastSeen"`
 	Healthy  bool   `json:"healthy"`
 	Pending  int64  `json:"pending"`
@@ -151,15 +152,20 @@ func RegisterAPI(r *gin.Engine, rdb *redis.Client, producer *stream.Producer) {
 				}
 
 				lastSeen := consumer.SeenTime.Format("2006-01-02 15:04:05 -07:00 MST")
-				res, _ := rdb.HGet(c, fmt.Sprintf("%s:%s:%s", streamName, group.Name, consumer.Name), "timestamp").Result()
+				b64StreamName := utils.Base64Encode(streamName)
+				key := fmt.Sprintf("consumer:health:%s:%s:%s", b64StreamName, group.Name, consumer.Name)
+				res, _ := rdb.HGet(c, key, "lastSeen").Result()
 				if res != "" {
 					healthy = true
-					unix, _ := strconv.ParseInt(res, 10, 64)
-					lastSeen = time.Unix(unix, 0).Format("2006-01-02 15:04:05 -07:00 MST")
+					lastSeen = res
 				}
+				log.Printf("res: %s", res)
+
+				ip, _ := rdb.HGet(c, key, "ip").Result()
 
 				consumers = append(consumers, StreamConsumer{
 					Name:     consumer.Name,
+					IP:       ip,
 					LastSeen: lastSeen,
 					Healthy:  healthy,
 					Pending:  consumerPending,
@@ -192,7 +198,7 @@ func RegisterAPI(r *gin.Engine, rdb *redis.Client, producer *stream.Producer) {
 			return
 		}
 
-		ackValues, _ := rdb.HGetAll(c, fmt.Sprintf("%s:acks", streamName)).Result()
+		ackValues, _ := rdb.HGetAll(c, fmt.Sprintf("acks:%s", streamName)).Result()
 		streamGroups, _ := rdb.XInfoGroups(c, streamName).Result()
 
 		c.JSON(http.StatusOK, buildStreamEventsResponse(streamName, events, ackValues, groupNames(streamGroups)))
@@ -206,7 +212,7 @@ func RegisterAPI(r *gin.Engine, rdb *redis.Client, producer *stream.Producer) {
 			return
 		}
 
-		if err := rdb.Del(c, fmt.Sprintf("%s:acks", stream)).Err(); err != nil {
+		if err := rdb.Del(c, fmt.Sprintf("acks:%s", stream)).Err(); err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}

@@ -207,6 +207,10 @@
     @apply bg-red-50 text-red-600;
   }
 
+  .status-pill.unknown {
+    @apply bg-slate-100 text-slate-500;
+  }
+
   .ack-cell {
     @apply whitespace-nowrap;
   }
@@ -249,6 +253,14 @@
 
   .consumer-pel {
     @apply ml-auto whitespace-nowrap;
+  }
+
+  .consumer-meta-row {
+    @apply flex flex-wrap gap-x-3 gap-y-1 leading-snug;
+  }
+
+  .consumer-meta-item {
+    @apply whitespace-nowrap;
   }
 
   .empty-state {

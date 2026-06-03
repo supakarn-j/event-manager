@@ -251,7 +251,7 @@ func looksLikeJSONObject(value string) bool {
 }
 
 func deleteEventAckMetadata(ctx context.Context, rdb *redis.Client, stream, id string) error {
-	ackKey := fmt.Sprintf("%s:acks", stream)
+	ackKey := fmt.Sprintf("acks:%s", stream)
 	pattern := ackFieldPatternForEvent(id)
 	var cursor uint64
 

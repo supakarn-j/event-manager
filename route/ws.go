@@ -15,6 +15,7 @@ func RegisterWS(r *gin.Engine, rdb *redis.Client, node *centrifuge.Node) {
 
 		log.Printf("client connected via %s (%s)", transportName, transportProto)
 		client.OnSubscribe(func(e centrifuge.SubscribeEvent, cb centrifuge.SubscribeCallback) {
+			log.Printf("client %s subscribes to channel %s", client.ID(), e.Channel)
 			cb(centrifuge.SubscribeReply{}, nil)
 		})
 
@@ -37,5 +38,4 @@ func RegisterWS(r *gin.Engine, rdb *redis.Client, node *centrifuge.Node) {
 		req := c.Request.WithContext(ctx)
 		wsHandler.ServeHTTP(c.Writer, req)
 	})
-
 }
