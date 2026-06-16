@@ -13,16 +13,11 @@ type StreamDetailResponse = {
   groups: StreamConsumerGroup[]
 }
 
-type StreamEventsResponse = {
-  streamName: string
-  headers: string[]
-  events: StreamEvent[]
-}
-
 type HealthCheckEvent = {
   action: 'health_check'
   group?: string
   consumer?: string
+  ip?: string
   healthy?: boolean
   last_seen?: string
 }
@@ -93,9 +88,9 @@ export default function StreamDetail() {
     try {
       const response = await fetch(`/api/v1/streams/${streamPath}/events`)
       if (!response.ok) throw new Error(await response.text())
-      const data = (await response.json()) as StreamEventsResponse
-      setHeaders(data.headers || [])
-      setEvents(data.events || [])
+      const data = ((await response.json()) as StreamEvent[]) || []
+      setHeaders(deriveEventHeaders(data))
+      setEvents(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load stream events')
     } finally {
@@ -152,6 +147,7 @@ export default function StreamDetail() {
           consumers: [
             {
               name: consumerName,
+              ip: event.ip,
               lastSeen: event.last_seen || '-',
               healthy: Boolean(event.healthy),
               pending: 0,
@@ -168,6 +164,7 @@ export default function StreamDetail() {
         if (!event.healthy) return current
         consumers.push({
           name: consumerName,
+          ip: event.ip,
           lastSeen: event.last_seen || '-',
           healthy: true,
           pending: 0,
@@ -175,6 +172,7 @@ export default function StreamDetail() {
       } else {
         consumers[consumerIndex] = {
           ...consumers[consumerIndex],
+          ip: event.ip || consumers[consumerIndex].ip,
           lastSeen: event.last_seen || consumers[consumerIndex].lastSeen,
           healthy: Boolean(event.healthy),
         }
@@ -275,4 +273,16 @@ export default function StreamDetail() {
       )}
     </Layout>
   )
+}
+
+export function deriveEventHeaders(events: StreamEvent[]) {
+  const headers = new Set<string>()
+
+  for (const event of events) {
+    for (const header of Object.keys(event.values || {})) {
+      headers.add(header)
+    }
+  }
+
+  return Array.from(headers).sort()
 }

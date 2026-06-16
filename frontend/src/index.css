@@ -207,24 +207,20 @@
     @apply bg-red-50 text-red-600;
   }
 
-  .ack-cell {
-    @apply whitespace-nowrap;
-  }
-
-  .ack-pill {
-    @apply inline-flex min-h-6 items-center rounded-full px-2.5 py-0.5 text-xs font-extrabold;
-  }
-
-  .ack-pill.pending {
+  .status-pill.unknown {
     @apply bg-slate-100 text-slate-500;
   }
 
-  .ack-pill.partial {
-    @apply bg-orange-100 text-orange-800;
+  .event-id-cell {
+    @apply flex min-w-0 flex-wrap items-center gap-2;
   }
 
-  .ack-pill.complete {
-    @apply bg-teal-50 text-teal-700;
+  .event-id-cell code {
+    @apply min-w-0;
+  }
+
+  .ack-badge {
+    @apply inline-flex min-h-6 items-center rounded-full bg-teal-50 px-2.5 py-0.5 text-xs font-extrabold leading-none text-teal-700;
   }
 
   .consumer-row {
@@ -249,6 +245,14 @@
 
   .consumer-pel {
     @apply ml-auto whitespace-nowrap;
+  }
+
+  .consumer-meta-row {
+    @apply flex flex-wrap gap-x-3 gap-y-1 leading-snug;
+  }
+
+  .consumer-meta-item {
+    @apply whitespace-nowrap;
   }
 
   .empty-state {

@@ -1,5 +1,6 @@
 export type StreamConsumer = {
   name: string
+  ip?: string
   lastSeen: string
   healthy: boolean
   pending: number
@@ -49,15 +50,16 @@ export default function ConsumerGroups({ streamName, groups, onDeleteConsumer }:
               <div className="consumer-row" id={`consumer-${group.name}-${consumer.name}`} key={consumer.name}>
                 <div className="consumer-summary">
                   <div className="consumer-title-row">
-                    <span className={`status-pill consumer-badge ${consumer.healthy ? '' : 'down'}`}>
-                      {consumer.healthy ? 'Healthy' : 'Down'}
+                    <span className={`status-pill consumer-badge ${consumer.healthy ? '' : 'unknown'}`}>
+                      {consumer.healthy ? 'Healthy' : 'Unknown'}
                     </span>
                     <span className="consumer-name truncate">{consumer.name}</span>
                     <span className="panel-meta consumer-pel">PEL: {consumer.pending}</span>
                   </div>
-                  <span className="panel-meta">
-                    <span className="consumer-last-seen">Last seen: {consumer.lastSeen || '-'}</span>
-                  </span>
+                  <div className="panel-meta consumer-meta-row">
+                    <span className="consumer-meta-item consumer-last-seen">Last seen: {consumer.lastSeen || '-'}</span>
+                    <span className="consumer-meta-item">IP: {consumer.ip || '-'}</span>
+                  </div>
                 </div>
                 <div className="d-flex align-items-center gap-2">
                   <button
