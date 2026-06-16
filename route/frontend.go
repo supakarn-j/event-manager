@@ -9,18 +9,6 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-type StreamListItem struct {
-	Name        string `json:"name"`
-	DisplayName string `json:"displayName"`
-	Length      int64  `json:"length"`
-	Groups      int64  `json:"groups"`
-}
-
-type StreamsResponse struct {
-	RedisURL string           `json:"redisUrl"`
-	Streams  []StreamListItem `json:"streams"`
-}
-
 func spaHandler(distFS fs.FS) gin.HandlerFunc {
 	fileServer := http.FileServer(http.FS(distFS))
 
@@ -33,7 +21,7 @@ func spaHandler(distFS fs.FS) gin.HandlerFunc {
 	}
 }
 
-func RegisterFrontend(r *gin.Engine, rdb *redis.Client, distFS fs.FS) {
+func registerFrontend(r *gin.Engine, rdb *redis.Client, distFS fs.FS) {
 	r.Static("/static", "static")
 	r.Static("/assets", "frontend/dist/assets")
 	r.StaticFile("/favicon.svg", "frontend/dist/favicon.svg")

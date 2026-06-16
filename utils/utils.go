@@ -41,7 +41,23 @@ func ExtractMapKeys[M ~map[K]V, K comparable, V any](m M) []K {
 	return keys
 }
 
-func ParseExpiredKey(s string) (stream string, group string, name string) {
-	parts := strings.SplitN(s, ":", 5)
-	return parts[2], parts[3], parts[4]
+func GetGroupFromPubSub(s string) string {
+	split := splitText(s, 4)
+	if len(split) < 4 {
+		return ""
+	}
+	return split[2]
+}
+
+func GetConsumerFromPubSub(s string) string {
+	split := splitText(s, 4)
+	if len(split) < 4 {
+		return ""
+	}
+	return split[3]
+}
+
+func splitText(s string, n int) []string {
+	split := strings.SplitN(s, ":", n)
+	return split
 }

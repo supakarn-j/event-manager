@@ -1,30 +1,22 @@
 package main
 
 import (
-	"context"
 	"embed"
+	"event-manager/pubsub"
 	"event-manager/route"
 	"io/fs"
 	"log"
 
-	"github.com/centrifugal/centrifuge"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	stream "github.com/supakarn-j/stream-go"
 )
 
-//go:embed frontend/dist/*
-//go:embed frontend/dist/assets/*
+//go:embed frontend/dist frontend/dist/assets/*
 var staticFiles embed.FS
 
 func main() {
 	app := initApp()
-
-	r := gin.Default()
-	node, err := centrifuge.New(centrifuge.Config{})
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     "localhost:6379",
@@ -36,9 +28,7 @@ func main() {
 	producer, err := stream.NewProducer(
 		stream.ProducerConfig{MaxLen: stream.DefaultProducerMaxLen},
 		stream.WithNewRedisClient(stream.RedisConfig{
-			Addr:     "localhost:6379",
-			Password: "",
-			DB:       0,
+			Addr: "localhost:6379",
 		}),
 	)
 	if err != nil {
@@ -46,18 +36,19 @@ func main() {
 	}
 	defer producer.Close()
 
+	r := gin.Default()
+
 	distFS, err := fs.Sub(staticFiles, "frontend/dist")
 	if err != nil {
 		panic(err)
 	}
 
-	route.RegisterAPI(r, rdb, producer)
-	route.RegisterFrontend(r, rdb, distFS)
-	route.RegisterWS(r, rdb, node)
+	listener := pubsub.NewRedisPubSubListener(rdb)
 
-	go func() {
-		listenEvents(context.Background(), rdb, node)
-	}()
+	route.NewRoute(r, listener, rdb, producer, distFS).
+		Register()
+
+	listener.Listen()
 
 	app.logger.Infof("[ENV: %s] Starting server on port %s...", app.Vars.ENV, app.Vars.PORT)
 	if err := r.Run(":" + app.Vars.PORT); err != nil {
